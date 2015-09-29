@@ -247,12 +247,13 @@ static void ppm_test(uint32_t len)
 	nsamples = 0;
 }
 
-static void rtlsdr_callback(unsigned char *buf, uint32_t len, void *ctx)
+static int rtlsdr_callback(unsigned char *buf, uint32_t len, void *ctx)
 {
 	underrun_test(buf, len, 0);
 
 	if (test_mode == PPM_BENCHMARK)
 		ppm_test(len);
+    return 0;
 }
 
 void e4k_benchmark(void)

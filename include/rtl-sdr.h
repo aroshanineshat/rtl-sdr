@@ -337,7 +337,20 @@ RTLSDR_API int rtlsdr_reset_buffer(rtlsdr_dev_t *dev);
 
 RTLSDR_API int rtlsdr_read_sync(rtlsdr_dev_t *dev, void *buf, int len, int *n_read);
 
-typedef void(*rtlsdr_read_async_cb_t)(unsigned char *buf, uint32_t len, void *ctx);
+/*!
+ * Send buffer back for use in new asynchronous read.
+ */
+RTLSDR_API void rtlsdr_submit_buffer(rtlsdr_dev_t *dev, unsigned char *buf);
+
+/*!
+ * Callback function for asynchronous reading.
+ *
+ * \return Status indication:
+ *         0 Sucess, buffer can be reused.
+ *         1 Sucess, buffer cannot be reused and shoudl be released by
+ *         calling rtlsdr_submit_buffer(dev, buf) latter.
+ */
+typedef int (*rtlsdr_read_async_cb_t)(unsigned char *buf, uint32_t len, void *ctx);
 
 /*!
  * Read samples from the device asynchronously. This function will block until

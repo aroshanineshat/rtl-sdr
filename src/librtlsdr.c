@@ -1684,6 +1684,21 @@ int rtlsdr_reset_buffer(rtlsdr_dev_t *dev)
 	return 0;
 }
 
+void rtlsdr_submit_buffer(rtlsdr_dev_t *dev, unsigned char *buf)
+{
+	uint32_t i = 0;
+	for ( ; i < dev->xfer_buf_num; ++i) {
+		if (buf == dev->xfer_buf[i])
+			break;
+	}
+	if (i == dev->xfer_buf_num) {
+		fprintf(stderr, "Submitted unknown buffer %p\n", buf);
+		return;
+	}
+
+	libusb_submit_transfer(dev->xfer[i]);
+}
+
 int rtlsdr_read_sync(rtlsdr_dev_t *dev, void *buf, int len, int *n_read)
 {
 	if (!dev)
@@ -1695,12 +1710,20 @@ int rtlsdr_read_sync(rtlsdr_dev_t *dev, void *buf, int len, int *n_read)
 static void LIBUSB_CALL _libusb_callback(struct libusb_transfer *xfer)
 {
 	rtlsdr_dev_t *dev = (rtlsdr_dev_t *)xfer->user_data;
+	int r;
 
 	if (LIBUSB_TRANSFER_COMPLETED == xfer->status) {
-		if (dev->cb)
-			dev->cb(xfer->buffer, xfer->actual_length, dev->cb_ctx);
+		if (dev->cb) {
+			switch (dev->cb(xfer->buffer, xfer->actual_length, dev->cb_ctx)) {
+				default:
+				case 0:
+					libusb_submit_transfer(xfer); /* resubmit transfer */
+					break;
 
-		libusb_submit_transfer(xfer); /* resubmit transfer */
+				case 1:
+					break;
+			}
+		}
 		dev->xfer_errors = 0;
 	} else if (LIBUSB_TRANSFER_CANCELLED != xfer->status) {
 #ifndef _WIN32
