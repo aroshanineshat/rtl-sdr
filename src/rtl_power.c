@@ -1009,7 +1009,7 @@ int main(int argc, char **argv)
 
 			fprintf(PlottingPIPE, Command);
 
-			sprintf(Command, "plot 'data%d.tmp' with lines lw 5 \n", ll);
+			sprintf(Command, "plot 'data%d.tmp' with lines lw 3 \n", ll);
 
 			fprintf(PlottingPIPE, Command);
 
