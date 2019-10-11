@@ -78,6 +78,8 @@
 static volatile int do_exit = 0;
 static rtlsdr_dev_t *dev = NULL;
 FILE *file;
+FILE *PlottingFile;
+FILE *PlottingPIPE;
 
 int16_t* Sinewave;
 double* power_table;
@@ -518,7 +520,7 @@ void frequency_range(char *arg, double crop)
 		ts->buf_len = buf_len;
 	}
 	/* report */
-	fprintf(stderr, "Number of frequency hops: %i\n", tune_count);
+	/*fprintf(stderr, "Number of frequency hops: %i\n", tune_count);
 	fprintf(stderr, "Dongle bandwidth: %iHz\n", bw_used);
 	fprintf(stderr, "Downsampling by: %ix\n", downsample);
 	fprintf(stderr, "Cropping by: %0.2f%%\n", crop*100);
@@ -526,7 +528,7 @@ void frequency_range(char *arg, double crop)
 	fprintf(stderr, "Logged FFT bins: %i\n", \
 	  (int)((double)(tune_count * (1<<bin_e)) * (1.0-crop)));
 	fprintf(stderr, "FFT bin size: %0.2fHz\n", bin_size);
-	fprintf(stderr, "Buffer size: %i bytes (%0.2fms)\n", buf_len, 1000 * 0.5 * (float)buf_len / (float)bw_used);
+	fprintf(stderr, "Buffer size: %i bytes (%0.2fms)\n", buf_len, 1000 * 0.5 * (float)buf_len / (float)bw_used);*/
 }
 
 void retune(rtlsdr_dev_t *d, int freq)
@@ -537,8 +539,8 @@ void retune(rtlsdr_dev_t *d, int freq)
 	/* wait for settling and flush buffer */
 	usleep(5000);
 	rtlsdr_read_sync(d, &dump, BUFFER_DUMP, &n_read);
-	if (n_read != BUFFER_DUMP) {
-		fprintf(stderr, "Error: bad retune.\n");}
+	//if (n_read != BUFFER_DUMP) {
+	//	fprintf(stderr, "Error: bad retune.\n");}
 }
 
 void fifth_order(int16_t *data, int length)
@@ -748,11 +750,22 @@ void csv_dbm(struct tuning_state *ts)
 		((double)ts->rate * (double)ts->samples));}
 	dbm  = 10 * log10(dbm);
 	fprintf(file, "%.2f\n", dbm);
+	fprintf(PlottingFile, "%d %.2f\n", ts->freq, dbm);
 	for (i=0; i<len; i++) {
 		ts->avg[i] = 0L;
 	}
 	ts->samples = 0;
 }
+
+int filenumber (int i){
+	if (i == 1){
+		return 0;
+	}
+	else {
+		return 1;
+	}
+}
+
 
 int main(int argc, char **argv)
 {
@@ -885,7 +898,7 @@ int main(int argc, char **argv)
 	if (interval < 1) {
 		interval = 1;}
 
-	fprintf(stderr, "Reporting every %i seconds\n", interval);
+	//fprintf(stderr, "Reporting every %i seconds\n", interval);
 
 	if (!dev_given) {
 		dev_index = verbose_device_search("0");
@@ -947,7 +960,6 @@ int main(int argc, char **argv)
 			exit(1);
 		}
 	}
-
 	/* Reset endpoint before we start reading from it (mandatory) */
 	verbose_reset_buffer(dev);
 
@@ -963,7 +975,13 @@ int main(int argc, char **argv)
 	for (i=0; i<length; i++) {
 		window_coefs[i] = (int)(256*window_fn(i, length));
 	}
+	PlottingPIPE = popen ("gnuplot -persistent", "w");
+	char *PlottingComman[] = {"set title \"Power Spectra\"", "plot 'data0.tmp'"};
+	int ll = 0;
+	char FileName [25];
 	while (!do_exit) {
+		sprintf(FileName, "data%d.tmp", ll);
+		PlottingFile = fopen(FileName, "w");
 		scanner();
 		time_now = time(NULL);
 		if (time_now < next_tick) {
@@ -973,15 +991,31 @@ int main(int argc, char **argv)
 		strftime(t_str, 50, "%Y-%m-%d, %H:%M:%S", cal_time);
 		for (i=0; i<tune_count; i++) {
 			fprintf(file, "%s, ", t_str);
+//			fprintf(PlottingFile, "%d ", &tunes[i].freq);
 			csv_dbm(&tunes[i]);
 		}
 		fflush(file);
+		fflush(PlottingFile);
+		fclose(PlottingFile);
 		while (time(NULL) >= next_tick) {
 			next_tick += interval;}
 		if (single) {
 			do_exit = 1;}
 		if (exit_time && time(NULL) >= exit_time) {
 			do_exit = 1;}
+		for (int q=0; q<2;q++){
+			char Command[60];
+			sprintf(Command, "set title \"Power Spectra\"\n");
+
+			fprintf(PlottingPIPE, Command);
+
+			sprintf(Command, "plot 'data%d.tmp' with lines lw 5 \n", ll);
+
+			fprintf(PlottingPIPE, Command);
+
+		}
+		fflush (PlottingPIPE);
+		ll = filenumber(ll);
 	}
 
 	/* clean up */
